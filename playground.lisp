@@ -72,32 +72,82 @@
   (:function length))
 
 (defrule bullet-list (and (& bullet)
-                          (+ list-item)
-                          (* blank-line)
-                          (! bullet))
-  (:destructure (bullet other-items blank-line not-a-bullet)
-    (declare (ignore bullet blank-line not-a-bullet))
-    (list :bullet-list
-          other-items)))
+                          (+ (and list-item
+                                  (* blank-line)
+                                  ;; (! bullet)
+                                  )))
+  (:destructure (bullet items)
+    (declare (ignore bullet))
+    (list* :bullet-list
+           (mapcar #'car items))))
 
-(defrule document (+ (or bullet-list
-                         line)))
+(defrule document-part (and (& current-indent2)
+                            (or bullet-list
+                                line))
+  (:destructure (indent content)
+    (declare (ignore indent))
+    content))
 
-(defun test (text)
-  (parse 'document
-         text
-         ;; :junk-allowed t
-         ))
-
+(defrule document (+ document-part))
 
 (deftest simple-case
   (let ((result (parse 'document
                        "* Foo
 * Bar"))
         (expected '((:BULLET-LIST
-                     ((:LIST-ITEM
-                       ("Foo
+                     (:LIST-ITEM
+                      ("Foo
 "))
-                      (:LIST-ITEM ("Bar")))))))
+                     (:LIST-ITEM ("Bar"))))))
     (ok (equalp result
                 expected))))
+
+(deftest case-with-empty-line
+  (let ((result (parse 'document
+                       "* Foo
+
+* Bar"))
+        (expected '((:BULLET-LIST
+                     (:LIST-ITEM
+                      ("Foo
+"))
+                     (:LIST-ITEM ("Bar"))))))
+    (ok (equalp result
+                expected))))
+
+
+(deftest case-with-multiline-items
+  (let ((result (parse 'document
+                       "* Foo
+
+  Second line
+  splitted.
+
+* Bar
+
+  Fourth line
+  splitted.
+"))
+        (expected '((:BULLET-LIST
+                     (:LIST-ITEM
+                      ("Foo
+"
+                       "Second line
+"
+                      "splitted.
+"))
+                     (:LIST-ITEM ("Bar
+"
+                                  "Fourth line
+"
+                      "splitted.
+"))))))
+    (ok (equalp result
+                expected))))
+
+
+(defun test (text &optional (rule 'bullet-list))
+  (parse rule
+         text
+         ;; :junk-allowed t
+         ))
